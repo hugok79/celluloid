@@ -43,6 +43,7 @@ enum
 	PROP_PLAYLIST_POS,
 	PROP_SPEED,
 	PROP_VOLUME,
+	PROP_VOLUME_MAX,
 	PROP_WINDOW_SCALE,
 	PROP_DISPLAY_FPS,
 	N_PROPERTIES
@@ -74,6 +75,7 @@ struct _CelluloidModel
 	gint64 playlist_pos;
 	gdouble speed;
 	gdouble volume;
+	gdouble volume_max;
 	gdouble window_scale;
 	gdouble display_fps;
 };
@@ -234,6 +236,10 @@ set_property(	GObject *object,
 		self->volume = g_value_get_double(value);
 		break;
 
+		case PROP_VOLUME_MAX:
+		self->volume_max = g_value_get_double(value);
+		break;
+
 		case PROP_WINDOW_SCALE:
 		self->window_scale = g_value_get_double(value);
 		break;
@@ -332,6 +338,10 @@ get_property(	GObject *object,
 		g_value_set_double(value, self->volume);
 		break;
 
+		case PROP_VOLUME_MAX:
+		g_value_set_double(value, self->volume_max);
+		break;
+
 		case PROP_WINDOW_SCALE:
 		g_value_set_double(value, self->window_scale);
 		break;
@@ -390,100 +400,107 @@ set_mpv_property(	GObject *object,
 	{
 		case PROP_AID:
 		celluloid_mpv_set_property(	mpv,
-					"aid",
-					MPV_FORMAT_STRING,
-					&self->aid );
+						"aid",
+						MPV_FORMAT_STRING,
+						&self->aid );
 		break;
 
 		case PROP_VID:
 		celluloid_mpv_set_property(	mpv,
-					"vid",
-					MPV_FORMAT_STRING,
-					&self->vid );
+						"vid",
+						MPV_FORMAT_STRING,
+						&self->vid );
 		break;
 
 		case PROP_SID:
 		celluloid_mpv_set_property(	mpv,
-					"sid",
-					MPV_FORMAT_STRING,
-					&self->sid );
+						"sid",
+						MPV_FORMAT_STRING,
+						&self->sid );
 		break;
 
 		case PROP_BORDER:
 		celluloid_mpv_set_property(	mpv,
-					"border",
-					MPV_FORMAT_FLAG,
-					&self->border );
+						"border",
+						MPV_FORMAT_FLAG,
+						&self->border );
 		break;
 
 		case PROP_FULLSCREEN:
 		celluloid_mpv_set_property(	mpv,
-					"fullscreen",
-					MPV_FORMAT_FLAG,
-					&self->fullscreen );
+						"fullscreen",
+						MPV_FORMAT_FLAG,
+						&self->fullscreen );
 		break;
 
 		case PROP_PAUSE:
 		celluloid_mpv_set_property(	mpv,
-					"pause",
-					MPV_FORMAT_FLAG,
-					&self->pause );
+						"pause",
+						MPV_FORMAT_FLAG,
+						&self->pause );
 		break;
 
 		case PROP_LOOP_FILE:
 		celluloid_mpv_set_property(	mpv,
-					"loop-file",
-					MPV_FORMAT_STRING,
-					&self->loop_file );
+						"loop-file",
+						MPV_FORMAT_STRING,
+						&self->loop_file );
 		break;
 
 		case PROP_LOOP_PLAYLIST:
 		celluloid_mpv_set_property(	mpv,
-					"loop-playlist",
-					MPV_FORMAT_STRING,
-					&self->loop_playlist );
+						"loop-playlist",
+						MPV_FORMAT_STRING,
+						&self->loop_playlist );
 		break;
 
 		case PROP_MEDIA_TITLE:
 		celluloid_mpv_set_property(	mpv,
-					"media-title",
-					MPV_FORMAT_INT64,
-					&self->media_title );
+						"media-title",
+						MPV_FORMAT_INT64,
+						&self->media_title );
 		break;
 
 		case PROP_PLAYLIST_POS:
 		celluloid_mpv_set_property(	mpv,
-					"playlist-pos",
-					MPV_FORMAT_INT64,
-					&self->playlist_pos );
+						"playlist-pos",
+						MPV_FORMAT_INT64,
+						&self->playlist_pos );
 		break;
 
 		case PROP_SPEED:
 		celluloid_mpv_set_property(	mpv,
-					"speed",
-					MPV_FORMAT_DOUBLE,
-					&self->speed );
+						"speed",
+						MPV_FORMAT_DOUBLE,
+						&self->speed );
 		break;
 
 		case PROP_VOLUME:
 		celluloid_mpv_set_property(	mpv,
-					"volume",
-					MPV_FORMAT_DOUBLE,
-					&self->volume );
+						"volume",
+						MPV_FORMAT_DOUBLE,
+						&self->volume );
+		break;
+
+		case PROP_VOLUME_MAX:
+		celluloid_mpv_set_property(	mpv,
+						"volume-max",
+						MPV_FORMAT_DOUBLE,
+						&self->volume_max );
 		break;
 
 		case PROP_WINDOW_SCALE:
 		celluloid_mpv_set_property(	mpv,
-					"window-scale",
-					MPV_FORMAT_DOUBLE,
-					&self->window_scale );
+						"window-scale",
+						MPV_FORMAT_DOUBLE,
+						&self->window_scale );
 		break;
 
 		case PROP_DISPLAY_FPS:
 		celluloid_mpv_set_property(	mpv,
-					"display-fps",
-					MPV_FORMAT_DOUBLE,
-					&self->display_fps );
+						"display-fps",
+						MPV_FORMAT_DOUBLE,
+						&self->display_fps );
 		break;
 	}
 }
@@ -656,6 +673,7 @@ celluloid_model_class_init(CelluloidModelClass *klass)
 			{"playlist-pos", PROP_PLAYLIST_POS, G_TYPE_INT64},
 			{"speed", PROP_SPEED, G_TYPE_DOUBLE},
 			{"volume", PROP_VOLUME, G_TYPE_DOUBLE},
+			{"volume-max", PROP_VOLUME_MAX, G_TYPE_DOUBLE},
 			{"window-scale", PROP_WINDOW_SCALE, G_TYPE_DOUBLE},
 			{"display-fps", PROP_DISPLAY_FPS, G_TYPE_DOUBLE},
 			{NULL, PROP_INVALID, 0} };
@@ -725,6 +743,7 @@ celluloid_model_init(CelluloidModel *model)
 	model->playlist_pos = 0;
 	model->speed = 1.0;
 	model->volume = 1.0;
+	model->volume_max = 100.0;
 	model->window_scale = 1.0;
 	model->display_fps = 0.0;
 }
