@@ -128,8 +128,11 @@ key_press_handler(GtkWidget *widget, GdkEvent *event, gpointer data)
 {
 	CelluloidController *controller = data;
 	gchar *keystr = get_full_keystr((GdkEventKey *)event);
+	gboolean searching = FALSE;
 
-	if(keystr)
+	g_object_get(controller->view, "searching", &searching, NULL);
+
+	if(keystr && !searching)
 	{
 		celluloid_model_key_down(controller->model, keystr);
 		g_free(keystr);
@@ -143,8 +146,11 @@ key_release_handler(GtkWidget *widget, GdkEvent *event, gpointer data)
 {
 	CelluloidController *controller = data;
 	gchar *keystr = get_full_keystr((GdkEventKey *)event);
+	gboolean searching = FALSE;
 
-	if(keystr)
+	g_object_get(controller->view, "searching", &searching, NULL);
+
+	if(keystr && !searching)
 	{
 		celluloid_model_key_up(controller->model, keystr);
 		g_free(keystr);

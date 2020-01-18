@@ -35,6 +35,7 @@ enum
 {
 	PROP_0,
 	PROP_PLAYLIST_COUNT,
+	PROP_SEARCHING,
 	N_PROPERTIES
 };
 
@@ -48,12 +49,18 @@ enum PlaylistColumn
 
 struct _CelluloidPlaylistWidget
 {
-	GtkScrolledWindow parent_instance;
+	GtkBox parent_instance;
 	gint64 playlist_count;
+	gboolean searching;
 	GtkListStore *store;
+	GtkWidget *scrolled_window;
 	GtkWidget *tree_view;
 	GtkTreeViewColumn *title_column;
 	GtkCellRenderer *title_renderer;
+	GtkWidget *search_bar;
+	GtkWidget *search_entry;
+	GtkWidget *placeholder;
+	GtkWidget *overlay;
 	gint last_x;
 	gint last_y;
 	gboolean dnd_delete;
@@ -61,8 +68,16 @@ struct _CelluloidPlaylistWidget
 
 struct _CelluloidPlaylistWidgetClass
 {
-	GtkScrolledWindowClass parent_class;
+	GtkBoxClass parent_class;
 };
+
+static gboolean
+gtk_tree_model_get_iter_last(GtkTreeModel *tree_model, GtkTreeIter *iter);
+
+static void
+find_match(	CelluloidPlaylistWidget *wgt,
+		gboolean match_current,
+		gboolean reverse );
 
 static void
 constructed(GObject *object);
@@ -78,6 +93,9 @@ get_property(	GObject *object,
 		guint property_id,
 		GValue *value,
 		GParamSpec *pspec );
+
+static gboolean
+is_zero(GBinding *binding, const GValue *from, GValue *to, gpointer data);
 
 static void
 drag_begin_handler(GtkWidget *widget, GdkDragContext *context, gpointer data);
@@ -120,13 +138,126 @@ row_inserted_handler(	GtkTreeModel *tree_model,
 static void
 row_deleted_handler(GtkTreeModel *tree_model, GtkTreePath *path, gpointer data);
 
+static void
+next_match_handler(GtkSearchEntry *entry, gpointer data);
+
+static void
+previous_match_handler(GtkSearchEntry *entry, gpointer data);
+
+static void
+search_changed_handler(GtkSearchEntry *entry, gpointer data);
+
+static void
+stop_search_handler(GtkSearchEntry *entry, gpointer data);
+
 static gboolean
 mouse_press_handler(GtkWidget *widget, GdkEventButton *event, gpointer data);
 
 static gchar *
 get_uri_selected(CelluloidPlaylistWidget *wgt);
 
-G_DEFINE_TYPE(CelluloidPlaylistWidget, celluloid_playlist_widget, GTK_TYPE_SCROLLED_WINDOW)
+G_DEFINE_TYPE(CelluloidPlaylistWidget, celluloid_playlist_widget, GTK_TYPE_BOX)
+
+static gboolean
+gtk_tree_model_get_iter_last(GtkTreeModel *tree_model, GtkTreeIter *iter)
+{
+	GtkTreeIter prev_iter;
+	gboolean rc = gtk_tree_model_get_iter_first(tree_model, iter);
+
+	if(rc)
+	{
+		// Keep iterating until we reach the end, keeping one extra
+		// iterator pointing to the row before the current one.
+		do
+		{
+			prev_iter = *iter;
+		}
+		while(gtk_tree_model_iter_next(tree_model, iter));
+
+		// Once we reach the end iter will be invalid so we need to
+		// restore the last valid value from prev_iter, which will be
+		// pointing to the last row.
+		*iter = prev_iter;
+	}
+
+	return rc;
+}
+
+
+static void
+find_match(	CelluloidPlaylistWidget *wgt,
+		gboolean match_current,
+		gboolean reverse )
+{
+	GtkTreeView *tree_view = GTK_TREE_VIEW(wgt->tree_view);
+	GtkTreeModel *tree_model = GTK_TREE_MODEL(wgt->store);
+	const gchar *term = gtk_entry_get_text(GTK_ENTRY(wgt->search_entry));
+	GtkTreeIter iter;
+	GtkTreePath *initial_path = NULL;
+	gboolean found = FALSE;
+	gboolean rc = FALSE;
+
+	gboolean (*advance)(GtkTreeModel *, GtkTreeIter *) =
+		reverse ?
+		gtk_tree_model_iter_previous :
+		gtk_tree_model_iter_next;
+	gboolean (*reset)(GtkTreeModel *, GtkTreeIter *) =
+		reverse ?
+		gtk_tree_model_get_iter_last :
+		gtk_tree_model_get_iter_first;
+
+	gtk_tree_view_get_cursor(tree_view, &initial_path, NULL);
+
+	rc =	initial_path &&
+		gtk_tree_model_get_iter(tree_model, &iter, initial_path);
+
+	while(rc && !found)
+	{
+		// Advance the iterator. If no next row exists, reset the
+		// iterator so that it points to either the first or the last
+		// row depending on the direction of the search.
+		if(!match_current && !advance(tree_model, &iter))
+		{
+			rc = reset(tree_model, &iter);
+		}
+
+		if(rc)
+		{
+			gchar *name = NULL;
+			GtkTreePath *path = NULL;
+
+			gtk_tree_model_get(	tree_model,
+						&iter,
+						PLAYLIST_NAME_COLUMN, &name,
+						-1 );
+
+			// Check if the iterator is pointing at the initial
+			// position. If it does, that means the search term does
+			// not match any row. If that's the case, set rc to
+			// FALSE so that the loop exits.
+			path = gtk_tree_model_get_path(tree_model, &iter);
+			rc =	match_current ||
+				gtk_tree_path_compare(initial_path, path) != 0;
+
+			found = g_str_match_string(term, name, TRUE);
+
+			gtk_tree_path_free(path);
+			g_free(name);
+		}
+
+		match_current = FALSE;
+	}
+
+	if(found)
+	{
+		GtkTreePath *path = gtk_tree_model_get_path(tree_model, &iter);
+
+		gtk_tree_view_set_cursor(tree_view, path, NULL, FALSE);
+		gtk_tree_path_free(path);
+	}
+
+	gtk_tree_path_free(initial_path);
+}
 
 static void
 constructed(GObject *object)
@@ -177,6 +308,33 @@ constructed(GObject *object)
 				"row-deleted",
 				G_CALLBACK(row_deleted_handler),
 				self );
+	g_signal_connect(	self->search_entry,
+				"next-match",
+				G_CALLBACK(next_match_handler),
+				self );
+	g_signal_connect(	self->search_entry,
+				"previous-match",
+				G_CALLBACK(previous_match_handler),
+				self );
+	g_signal_connect(	self->search_entry,
+				"search-changed",
+				G_CALLBACK(search_changed_handler),
+				self );
+	g_signal_connect(	self->search_entry,
+				"stop-search",
+				G_CALLBACK(stop_search_handler),
+				self );
+
+	g_object_bind_property(	self, "searching",
+				self->search_bar, "search-mode-enabled",
+				G_BINDING_BIDIRECTIONAL );
+	g_object_bind_property_full(	self, "playlist-count",
+					self->placeholder, "visible",
+					G_BINDING_DEFAULT,
+					is_zero,
+					NULL,
+					NULL,
+					NULL );
 
 	gtk_tree_view_enable_model_drag_source(	GTK_TREE_VIEW(self->tree_view),
 						GDK_BUTTON1_MASK,
@@ -193,11 +351,19 @@ constructed(GObject *object)
 
 	gtk_widget_set_can_focus(self->tree_view, FALSE);
 	gtk_tree_view_set_reorderable(GTK_TREE_VIEW(self->tree_view), FALSE);
+	gtk_tree_view_set_headers_visible(GTK_TREE_VIEW(self->tree_view), FALSE);
 
 	gtk_tree_view_append_column
 		(GTK_TREE_VIEW(self->tree_view), self->title_column);
 
-	gtk_container_add(GTK_CONTAINER(self), self->tree_view);
+	gtk_overlay_add_overlay(GTK_OVERLAY(self->overlay), self->placeholder);
+
+	gtk_container_add(GTK_CONTAINER(self->overlay), self->tree_view);
+	gtk_container_add(GTK_CONTAINER(self->scrolled_window), self->overlay);
+	gtk_box_pack_end(GTK_BOX(self), self->scrolled_window, TRUE, TRUE, 0);
+
+	gtk_container_add(GTK_CONTAINER(self->search_bar), self->search_entry);
+	gtk_box_pack_start(GTK_BOX(self), self->search_bar, FALSE, TRUE, 0);
 
 	G_OBJECT_CLASS(celluloid_playlist_widget_parent_class)->constructed(object);
 }
@@ -213,6 +379,15 @@ set_property(	GObject *object,
 	if(property_id == PROP_PLAYLIST_COUNT)
 	{
 		self->playlist_count = g_value_get_int64(value);
+	}
+	else if(property_id == PROP_SEARCHING)
+	{
+		self->searching = g_value_get_boolean(value);
+
+		if(self->searching)
+		{
+			gtk_widget_grab_focus(self->search_entry);
+		}
 	}
 	else
 	{
@@ -232,10 +407,22 @@ get_property(	GObject *object,
 	{
 		g_value_set_int64(value, self->playlist_count);
 	}
+	else if(property_id == PROP_SEARCHING)
+	{
+		g_value_set_boolean(value, self->searching);
+	}
 	else
 	{
 		G_OBJECT_WARN_INVALID_PROPERTY_ID(object, property_id, pspec);
 	}
+}
+
+static gboolean
+is_zero(GBinding *binding, const GValue *from, GValue *to, gpointer data)
+{
+	g_value_set_boolean(to, g_value_get_int64(from) == 0);
+
+	return TRUE;
 }
 
 static void
@@ -534,6 +721,30 @@ row_deleted_handler(GtkTreeModel *tree_model, GtkTreePath *path, gpointer data)
 	g_object_notify(data, "playlist-count");
 }
 
+static void
+next_match_handler(GtkSearchEntry *entry, gpointer data)
+{
+	find_match(data, FALSE, FALSE);
+}
+
+static void
+previous_match_handler(GtkSearchEntry *entry, gpointer data)
+{
+	find_match(data, FALSE, TRUE);
+}
+
+static void
+search_changed_handler(GtkSearchEntry *entry, gpointer data)
+{
+	find_match(data, TRUE, FALSE);
+}
+
+static void
+stop_search_handler(GtkSearchEntry *entry, gpointer data)
+{
+	g_object_set(data, "searching", FALSE, NULL);
+}
+
 static gboolean
 mouse_press_handler(GtkWidget *widget, GdkEventButton *event, gpointer data)
 {
@@ -635,6 +846,14 @@ celluloid_playlist_widget_class_init(CelluloidPlaylistWidgetClass *klass)
 			G_PARAM_READABLE );
 	g_object_class_install_property(obj_class, PROP_PLAYLIST_COUNT, pspec);
 
+	pspec = g_param_spec_boolean
+		(	"searching",
+			"Searching",
+			"Whether or not the user is searching the playlist",
+			FALSE,
+			G_PARAM_READWRITE );
+	g_object_class_install_property(obj_class, PROP_SEARCHING, pspec);
+
 	g_signal_new(	"row-activated",
 			G_TYPE_FROM_CLASS(klass),
 			G_SIGNAL_RUN_FIRST,
@@ -681,7 +900,10 @@ celluloid_playlist_widget_class_init(CelluloidPlaylistWidgetClass *klass)
 static void
 celluloid_playlist_widget_init(CelluloidPlaylistWidget *wgt)
 {
+	GtkStyleContext *style = NULL;
+
 	wgt->playlist_count = 0;
+	wgt->searching = FALSE;
 	wgt->title_renderer = gtk_cell_renderer_text_new();
 	wgt->title_column
 		= gtk_tree_view_column_new_with_attributes
@@ -690,8 +912,18 @@ celluloid_playlist_widget_init(CelluloidPlaylistWidget *wgt)
 				"text", PLAYLIST_NAME_COLUMN,
 				"weight", PLAYLIST_WEIGHT_COLUMN,
 				NULL );
+	wgt->scrolled_window = gtk_scrolled_window_new(NULL, NULL);
+	wgt->search_bar = gtk_search_bar_new();
+	wgt->search_entry = gtk_search_entry_new();
+	wgt->placeholder = gtk_label_new(_("Playlist is empty"));
+	wgt->overlay = gtk_overlay_new();
 	wgt->dnd_delete = TRUE;
 
+	style = gtk_widget_get_style_context(wgt->placeholder);
+	gtk_style_context_add_class(style, "dim-label");
+
+	gtk_orientable_set_orientation
+		(GTK_ORIENTABLE(wgt), GTK_ORIENTATION_VERTICAL);
 	gtk_widget_set_size_request
 		(GTK_WIDGET(wgt), PLAYLIST_MIN_WIDTH, -1);
 	gtk_tree_view_column_set_sizing
