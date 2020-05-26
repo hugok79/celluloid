@@ -1,7 +1,7 @@
 AC_PREREQ([2.69])
 
 AC_INIT(	[celluloid],
-		[0.18],
+		[0.19],
 		[http://github.com/celluloid-player/celluloid/issues],
 		[celluloid],
 		[http://github.com/celluloid/celluloid] )
@@ -85,7 +85,7 @@ AS_IF([test "x$GLIB_GENMARSHAL" = "x"], [
 	AC_MSG_ERROR([Could not find glib-genmarshal])
 ])
 
-PKG_CHECK_MODULES(DEPS, [gtk+-3.0 >= 3.22.23 glib-2.0 >= 2.44 mpv >= 1.101 epoxy])
+PKG_CHECK_MODULES(DEPS, [gtk+-3.0 >= 3.22.23 glib-2.0 >= 2.44 mpv >= 1.107 epoxy])
 AC_SEARCH_LIBS([sqrt], [m])
 
 AC_DEFINE([GLIB_VERSION_MIN_REQUIRED], [GLIB_VERSION_2_44], [Dont warn using older APIs])

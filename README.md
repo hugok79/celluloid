@@ -16,7 +16,7 @@ mpv's powerful playback capabilities.
 - gcc (build)
 - glib >= 2.44
 - gtk >= 3.22
-- mpv >= 0.27
+- mpv >= 0.32
 - epoxy
 - lua (optional)
 - youtube-dl (optional)
@@ -125,7 +125,7 @@ be found [here](https://github.com/mpv-player/mpv/wiki/User-Scripts).
 
 Celluloid defines a set of keybindings in the macro `DEFAULT_KEYBINDS`, which
 can be found in
-[src/gmpv_def.h](https://github.com/celluloid/celluloid/blob/master/src/gmpv_def.h).
+[src/celluloid-def.h](https://github.com/celluloid-player/celluloid/blob/master/src/celluloid-def.h).
 The syntax used is exactly the same as mpv's `input.conf`. These keybindings are
 applied on top of default keybindings provided by mpv.
 

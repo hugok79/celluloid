@@ -80,6 +80,9 @@ static void
 audio_track_load_handler(CelluloidView *view, const gchar *uri, gpointer data);
 
 static void
+video_track_load_handler(CelluloidView *view, const gchar *uri, gpointer data);
+
+static void
 subtitle_track_load_handler(	CelluloidView *view,
 				const gchar *uri,
 				gpointer data );
@@ -460,6 +463,12 @@ audio_track_load_handler(CelluloidView *view, const gchar *uri, gpointer data)
 }
 
 static void
+video_track_load_handler(CelluloidView *view, const gchar *uri, gpointer data)
+{
+	celluloid_model_load_video_track(CELLULOID_CONTROLLER(data)->model, uri);
+}
+
+static void
 subtitle_track_load_handler(	CelluloidView *view,
 				const gchar *uri,
 				gpointer data )
@@ -608,6 +617,9 @@ connect_signals(CelluloidController *controller)
 					loop_to_boolean,
 					NULL,
 					NULL );
+	g_object_bind_property(	controller->view, "shuffle",
+				controller->model, "shuffle",
+				G_BINDING_BIDIRECTIONAL|G_BINDING_SYNC_CREATE );
 
 	g_signal_connect(	controller->model,
 				"notify::ready",
@@ -718,6 +730,10 @@ connect_signals(CelluloidController *controller)
 	g_signal_connect(	controller->view,
 				"audio-track-load",
 				G_CALLBACK(audio_track_load_handler),
+				controller );
+	g_signal_connect(	controller->view,
+				"video-track-load",
+				G_CALLBACK(video_track_load_handler),
 				controller );
 	g_signal_connect(	controller->view,
 				"subtitle-track-load",
@@ -1274,11 +1290,12 @@ celluloid_controller_autofit(	CelluloidController *controller,
 	{
 		gint new_width = (gint)(multiplier*(gdouble)width);
 		gint new_height = (gint)(multiplier*(gdouble)height);
+		gint scale = celluloid_view_get_scale_factor(controller->view);
 
 		g_debug("Resizing window to %dx%d", new_width, new_height);
 		celluloid_view_resize_video_area(	controller->view,
-							new_width,
-							new_height );
+							new_width/scale,
+							new_height/scale );
 	}
 
 	g_free(vid);
